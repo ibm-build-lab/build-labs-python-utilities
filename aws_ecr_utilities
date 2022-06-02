@@ -1,0 +1,61 @@
+import subprocess, json
+aws_repository_filter = '228078468156.dkr.ecr.us-east-2.amazonaws.com/5gc'
+aws_repository = '228078468156.dkr.ecr.us-east-2.amazonaws.com'
+container_version = 'latest'
+
+def getRepoNames():
+    repoList = []
+    p = subprocess.Popen('aws ecr describe-repositories | grep ' + aws_repository_filter, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    for line in p.stdout.readlines():
+        str = line.strip().decode('utf-8')
+        match = "5gc"
+        start = str.find(match)
+        stop = len(str)
+        repoList.append(str[start:start + stop].replace('",', ''))
+    retval = p.wait()
+    return repoList
+
+def main():
+    repoList = getRepoNames()
+    repoImageList = []
+
+    for repoName in repoList:
+
+        #if repoName in ['5gc/n3iwf/sctpmgr', '5gc/platform/axyom-init']:
+        print('Repository: ', repoName)
+        p = subprocess.Popen('aws ecr list-images --repository-name ' + repoName,
+                             shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        str = ""
+        for line in p.stdout.readlines():
+            str = str + line.strip().decode('utf-8')
+        retval = p.wait()
+
+        json_dict = json.loads(str)
+        for k, v in json_dict.items():
+            vars()[k] = v
+            print('Key: ', k, 'Value: ', v)
+
+        image_list = json_dict["imageIds"]
+
+        for i in image_list:
+            if 'imageTag' in i:
+                if (i["imageTag"]==container_version):
+                    repoImage = {"repo_name": "", "image_digest": "", "image_tag": ""}
+                    repoImage["repo_name"] = repoName
+                    repoImage["image_digest"] = i["imageDigest"]
+                    repoImage["image_tag"] = i["imageTag"]
+                    repoImageList.append(repoImage)
+
+    # docker pull 228078468156.dkr.ecr.us-east-2.amazonaws.com/5gc/n3iwf/sctpmgr:7.1.0-beta.1
+    for j in repoImageList:
+        docker_cmd = 'docker pull ' + aws_repository + '/' + j["repo_name"] + ':' + container_version
+        p = subprocess.Popen(docker_cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        for line in p.stdout.readlines():
+            str = line.strip().decode('utf-8')
+            print(str)
+        retval = p.wait()
+
+    print(repoImageList)
+
+if __name__ == "__main__":
+    main()
